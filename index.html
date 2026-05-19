@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct Print Label 150x100mm (TSPL)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        #print-section { display: none; }
+        
+        /* Animasi Loading Print */
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-fast { animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+        /* Hover effect untuk preview gambar */
+        .preview-item {
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: zoom-in;
+        }
+        .preview-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            border-color: #3b82f6; 
+        }
+
+        /* Tab Active Style */
+        .tab-active { border-bottom-color: #2563eb; color: #1e3a8a; background-color: #eff6ff; }
+        .tab-inactive { border-bottom-color: transparent; color: #64748b; }
+        .tab-inactive:hover { color: #334155; background-color: #f8fafc; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans relative pb-20">
+
+    <div id="image-modal" class="hidden fixed inset-0 bg-slate-900/90 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onclick="closeModal()">
+        <div class="relative max-w-full max-h-full flex flex-col items-center">
+            <button onclick="closeModal()" class="absolute -top-10 right-0 text-white hover:text-red-400 transition-colors">
+                <i data-lucide="x-circle" class="w-8 h-8"></i>
+            </button>
+            <img id="modal-image" src="" alt="Pratinjau Label" class="max-w-full max-h-[85vh] object-contain bg-white rounded shadow-2xl">
+            <p class="text-white mt-4 text-sm bg-slate-800/50 px-4 py-2 rounded-full">Pratinjau - Klik di mana saja untuk menutup</p>
+        </div>
+    </div>
+
+    <div id="printing-overlay" class="hidden fixed inset-0 bg-slate-900/90 z-50 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+        <i data-lucide="printer" class="w-16 h-16 animate-pulse-fast mb-4 text-blue-400"></i>
+        <h2 class="text-2xl font-bold mb-2">Sedang Mencetak...</h2>
+        <p class="text-slate-300 text-center max-w-sm mb-4">Mengirim data ke Printer Bluetooth. <br>Kecepatan Ekstrem (1ms).</p>
+        <div class="w-64 bg-slate-700 rounded-full h-3">
+            <div id="print-progress-bar" class="bg-blue-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <p id="print-progress-text" class="mt-2 text-sm text-blue-200">0%</p>
+    </div>
+
+    <div id="app-ui" class="max-w-3xl mx-auto p-4 md:p-8">
+        
+        <header class="text-center mb-6">
+            <div class="inline-flex items-center justify-center p-3 bg-blue-100 text-blue-600 rounded-full mb-4">
+                <i data-lucide="printer" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">Aplikasi Cetak Label Thermal</h1>
+            <p class="text-slate-600">Dukungan cetak PDF & Manual dengan Kecepatan 1ms</p>
+        </header>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div id="bt-icon-bg" class="bg-slate-100 p-3 rounded-full transition-colors">
+                        <i data-lucide="bluetooth" id="bt-icon" class="text-slate-500 w-6 h-6 transition-colors"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-800">Koneksi Bluetooth</h3>
+                        <p class="text-sm text-slate-500">
+                            Status: <span id="bt-status" class="text-slate-500 font-medium">Belum Terhubung</span>
+                        </p>
+                        <p id="bt-device-name" class="text-xs font-bold text-blue-600 hidden"></p>
+                    </div>
+                </div>
+                <div class="w-full sm:w-auto flex flex-wrap gap-2">
+                    <button id="bt-connect-btn" onclick="connectBluetooth()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-md">
+                        <i data-lucide="search" class="w-4 h-4"></i> Sambungkan
+                    </button>
+                    
+                    <button id="bt-test-btn" onclick="testPrinter()" class="hidden w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl font-medium transition-colors items-center justify-center gap-2 shadow-md">
+                        <i data-lucide="file-check-2" class="w-4 h-4"></i> Test
+                    </button>
+
+                    <button id="bt-disconnect-btn" onclick="disconnectBluetooth()" class="hidden w-full sm:w-auto bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2.5 rounded-xl font-medium transition-colors items-center justify-center gap-2">
+                        <i data-lucide="bluetooth-off" class="w-4 h-4"></i> Putuskan
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100 flex items-center gap-3">
+                <input type="checkbox" id="fix-bg-checkbox" checked class="w-5 h-5 text-blue-600 rounded border-gray-300 cursor-pointer">
+                <label for="fix-bg-checkbox" class="font-medium text-slate-700 cursor-pointer text-sm">
+                    Perbaikan Warna Hitam-Putih
+                    <span class="block text-slate-400 text-xs font-normal">Pastikan ini dicentang agar hasil cetakan tidak blank (hitam).</span>
+                </label>
+            </div>
+        </div>
+
+        <div id="bt-warning" class="hidden mb-6 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800 flex flex-col gap-2">
+            <div class="flex gap-3 items-start">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-600 shrink-0 mt-0.5"></i>
+                <div id="bt-warning-text">Browser atau lingkungan ini tidak mendukung Web Bluetooth. Buka file ini dari GitHub Pages (HTTPS).</div>
+            </div>
+        </div>
+
+        <div class="flex mb-6 border-b-2 border-slate-200">
+            <button onclick="switchTab('pdf')" id="tab-btn-pdf" class="flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-active">
+                <i data-lucide="file-text" class="w-5 h-5 inline-block mr-1 -mt-1"></i> Mode Resi PDF
+            </button>
+            <button onclick="switchTab('manual')" id="tab-btn-manual" class="flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-inactive">
+                <i data-lucide="pen-tool" class="w-5 h-5 inline-block mr-1 -mt-1"></i> Mode Bebas (Manual)
+            </button>
+        </div>
+
+        <div id="section-pdf" class="block">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl p-8 bg-slate-50 hover:bg-slate-100 cursor-pointer relative" id="drop-zone">
+                    <i data-lucide="file-up" class="w-10 h-10 text-slate-400 mb-3"></i>
+                    <h3 class="text-lg font-semibold mb-1 text-center">Pilih File PDF Resi</h3>
+                    <input type="file" id="pdf-upload" accept="application/pdf" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <button class="mt-4 bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium transition-colors pointer-events-none">
+                        Browse File
+                    </button>
+                </div>
+                
+                <div id="file-list-container" class="hidden mt-4">
+                    <div class="flex justify-between items-center mb-2 border-b pb-2">
+                        <h4 class="font-semibold text-slate-700">Daftar Label PDF:</h4>
+                        <span id="total-pages-display" class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-bold">0 Halaman</span>
+                    </div>
+                    <div id="screen-preview" class="flex gap-4 overflow-x-auto pb-4 pt-2">
+                        </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="hidden flex-col items-center justify-center py-6">
+                <i data-lucide="loader-2" class="w-8 h-8 text-blue-600 animate-spin mb-2"></i>
+                <p id="loading-text" class="text-slate-600 font-medium">Membaca PDF...</p>
+            </div>
+
+            <div id="action-area" class="hidden">
+                <div class="flex flex-col gap-3">
+                    <button id="btn-direct-print" onclick="startDirectPrint('pdf')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg text-lg">
+                        <i data-lucide="printer" class="w-6 h-6"></i> Cetak Label PDF Sekarang!
+                    </button>
+                    <button onclick="resetApp()" class="w-full bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 py-3 rounded-xl font-medium text-sm">
+                        Reset Data
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="section-manual" class="hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                
+                <div class="mb-4">
+                    <label class="block font-bold text-slate-700 mb-2">1. Sisipkan Gambar/Logo (Opsional)</label>
+                    <input type="file" id="manual-image" accept="image/*" onchange="renderManualCanvas()" class="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-50 cursor-pointer">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block font-bold text-slate-700 mb-2">2. Masukkan Kalimat Bebas</label>
+                    <textarea id="manual-text" oninput="renderManualCanvas()" rows="5" class="w-full p-4 border border-slate-300 rounded-lg bg-slate-50 text-slate-800 placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Ketik teks yang ingin dicetak di sini... Teks akan otomatis turun ke baris baru jika terlalu panjang."></textarea>
+                </div>
+
+                <div class="mt-6 border-t pt-4 flex flex-col items-center">
+                    <h4 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i data-lucide="eye" class="w-5 h-5"></i> Pratinjau Kertas 150x100mm:</h4>
+                    
+                    <canvas id="manual-canvas" width="800" height="1200" class="hidden"></canvas>
+                    
+                    <div class="relative preview-item group" onclick="openModal('manual-canvas')">
+                        <img id="manual-preview-img" class="w-48 h-auto object-contain border border-slate-300 shadow-md bg-white rounded" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=">
+                        <div class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center rounded transition-opacity">
+                            <i data-lucide="zoom-in" class="text-white w-8 h-8"></i>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="flex flex-col gap-3">
+                <button id="btn-manual-print" onclick="startDirectPrint('manual')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg text-lg">
+                    <i data-lucide="printer" class="w-6 h-6"></i> Cetak Label Manual Sekarang!
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="print-section"></div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- SISTEM TABS ---
+        function switchTab(mode) {
+            const tabPdf = document.getElementById('tab-btn-pdf');
+            const tabManual = document.getElementById('tab-btn-manual');
+            const secPdf = document.getElementById('section-pdf');
+            const secManual = document.getElementById('section-manual');
+
+            if (mode === 'pdf') {
+                tabPdf.className = "flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-active";
+                tabManual.className = "flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-inactive";
+                secPdf.classList.replace('hidden', 'block');
+                secManual.classList.replace('block', 'hidden');
+            } else {
+                tabManual.className = "flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-active";
+                tabPdf.className = "flex-1 py-3 text-center font-bold border-b-2 transition-colors tab-inactive";
+                secManual.classList.replace('hidden', 'block');
+                secPdf.classList.replace('block', 'hidden');
+                renderManualCanvas(); // Render kosong pertama kali
+            }
+        }
+
+        // --- FITUR MODAL ---
+        function openModal(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            if(canvas) {
+                const dataUrl = canvas.toDataURL('image/png');
+                document.getElementById('modal-image').src = dataUrl;
+                document.getElementById('image-modal').classList.remove('hidden');
+                document.body.style.overflow = 'hidden'; 
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('image-modal').classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // --- BLUETOOTH CORE ---
+        const warningBox = document.getElementById('bt-warning');
+        if (!navigator.bluetooth) {
+            warningBox.classList.remove('hidden');
+        } else if (!window.isSecureContext) {
+            warningBox.classList.remove('hidden');
+        }
+
+        let btDevice = null;
+        let btCharacteristic = null;
+
+        async function connectBluetooth() {
+            try {
+                updateBluetoothUI('connecting');
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [
+                        '000018f0-0000-1000-8000-00805f9b34fb', 
+                        '0000ffe0-0000-1000-8000-00805f9b34fb', 
+                        'e7810a71-73ae-499d-8c15-faa9aef0c3f2'  
+                    ]
+                });
+
+                btDevice = device;
+                btDevice.addEventListener('gattserverdisconnected', handleDisconnect);
+
+                const server = await device.gatt.connect();
+                const services = await server.getPrimaryServices();
+                
+                for (const service of services) {
+                    const characteristics = await service.getCharacteristics();
+                    for (const char of characteristics) {
+                        if (char.properties.write || char.properties.writeWithoutResponse) {
+                            btCharacteristic = char;
+                            break;
+                        }
+                    }
+                    if (btCharacteristic) break;
+                }
+
+                if (!btCharacteristic) throw new Error("Tidak menemukan port write pada perangkat ini.");
+                updateBluetoothUI('connected', device.name);
+            } catch (error) {
+                console.error(error);
+                updateBluetoothUI('disconnected');
+                if (error.name === 'SecurityError') alert("Akses Bluetooth Ditolak!\nBuka dari HTTPS agar diizinkan browser.");
+                else if (error.name !== 'NotFoundError') alert("Gagal menyambung: " + error.message);
+            }
+        }
+
+        function disconnectBluetooth() {
+            if (btDevice && btDevice.gatt.connected) btDevice.gatt.disconnect();
+        }
+
+        function handleDisconnect() {
+            btCharacteristic = null;
+            btDevice = null;
+            updateBluetoothUI('disconnected');
+        }
+
+        function updateBluetoothUI(state, name = '') {
+            const status = document.getElementById('bt-status');
+            const nameEl = document.getElementById('bt-device-name');
+            const iconBg = document.getElementById('bt-icon-bg');
+            const icon = document.getElementById('bt-icon');
+            const connectBtn = document.getElementById('bt-connect-btn');
+            const disconnectBtn = document.getElementById('bt-disconnect-btn');
+            const testBtn = document.getElementById('bt-test-btn');
+            
+            if (state === 'connecting') {
+                status.innerHTML = '<span class="text-yellow-600">Menyambungkan...</span>';
+                icon.classList.add('animate-pulse');
+            } else if (state === 'connected') {
+                status.innerHTML = '<span class="text-green-600 font-bold">Siap Cetak!</span>';
+                nameEl.textContent = name;
+                nameEl.classList.remove('hidden');
+                iconBg.classList.replace('bg-slate-100', 'bg-green-100');
+                icon.classList.replace('text-slate-500', 'text-green-600');
+                icon.classList.remove('animate-pulse');
+                
+                connectBtn.classList.replace('flex', 'hidden');
+                disconnectBtn.classList.replace('hidden', 'flex');
+                testBtn.classList.replace('hidden', 'flex');
+            } else {
+                status.innerHTML = '<span class="text-slate-500">Belum Terhubung</span>';
+                nameEl.classList.add('hidden');
+                iconBg.classList.replace('bg-green-100', 'bg-slate-100');
+                icon.classList.replace('text-green-600', 'text-slate-500');
+                icon.classList.remove('animate-pulse');
+                
+                connectBtn.classList.replace('hidden', 'flex');
+                disconnectBtn.classList.replace('flex', 'hidden');
+                testBtn.classList.replace('flex', 'hidden');
+            }
+        }
+
+        // --- PENGIRIMAN DATA DENGAN JEDA 1ms (TERCEPAT) ---
+        async function sendDataToPrinterInChunks(data, progressCallback) {
+            const CHUNK_SIZE = 100; 
+            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+                const chunk = data.slice(i, i + CHUNK_SIZE);
+                try {
+                    if (btCharacteristic.properties.writeWithoutResponse) {
+                        await btCharacteristic.writeValueWithoutResponse(chunk);
+                    } else {
+                        await btCharacteristic.writeValue(chunk);
+                    }
+                } catch (e) {
+                    console.warn("Retrying chunk...", e);
+                    await new Promise(r => setTimeout(r, 50)); 
+                    if (btCharacteristic.properties.writeWithoutResponse) {
+                        await btCharacteristic.writeValueWithoutResponse(chunk);
+                    } else {
+                        await btCharacteristic.writeValue(chunk);
+                    }
+                }
+                
+                // JEDA 1ms - SUPER EKSTREM
+                await new Promise(resolve => setTimeout(resolve, 1));
+
+                if (progressCallback && i % (CHUNK_SIZE * 10) === 0) {
+                    progressCallback(i / data.length);
+                }
+            }
+            if(progressCallback) progressCallback(1);
+        }
+
+        async function testPrinter() {
+            if (!btCharacteristic) {
+                alert("Printer belum terhubung!");
+                return;
+            }
+            try {
+                let tsplCmd = "SIZE 100 mm,150 mm\r\nGAP 2 mm,0\r\nDIRECTION 1\r\nCLS\r\n";
+                tsplCmd += "TEXT 50,50,\"4\",0,1,1,\"=== TEST KONEKSI PRINTER ===\"\r\n";
+                tsplCmd += "TEXT 50,150,\"3\",0,1,1,\"Kecepatan Transfer Maksimal: 1ms.\"\r\n";
+                tsplCmd += "PRINT 1\r\n";
+                
+                const encoder = new TextEncoder();
+                await sendDataToPrinterInChunks(encoder.encode(tsplCmd), null);
+            } catch (error) {
+                alert("Gagal mengirim test print: " + error.message);
+            }
+        }
+
+        // --- FUNGSI CANVAS MODE MANUAL (MEMBUAT LABEL BEBAS) ---
+        async function renderManualCanvas() {
+            const canvas = document.getElementById('manual-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Bersihkan Canvas jadi Putih (800x1200 adalah standar rasio 100x150mm di 203dpi)
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, 800, 1200);
+
+            // Pengaturan Font
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 36px sans-serif';
+
+            let currentY = 50; // Jarak tepi atas
+            const marginX = 40; // Jarak tepi kiri & kanan
+
+            // Fungsi untuk menggambar teks agar otomatis turun baris (Word Wrap)
+            function wrapText(text, x, y, maxWidth, lineHeight) {
+                const paragraphs = text.split('\n');
+                for (let i = 0; i < paragraphs.length; i++) {
+                    let words = paragraphs[i].split(' ');
+                    let line = '';
+                    for (let n = 0; n < words.length; n++) {
+                        let testLine = line + words[n] + ' ';
+                        let metrics = ctx.measureText(testLine);
+                        let testWidth = metrics.width;
+                        if (testWidth > maxWidth && n > 0) {
+                            ctx.fillText(line, x, y);
+                            line = words[n] + ' ';
+                            y += lineHeight;
+                        } else {
+                            line = testLine;
+                        }
+                    }
+                    ctx.fillText(line, x, y);
+                    y += lineHeight; // Jarak antar paragraf
+                }
+                return y;
+            }
+
+            const imgFile = document.getElementById('manual-image').files[0];
+            const textContent = document.getElementById('manual-text').value;
+
+            // Jika ada gambar, gambar terlebih dahulu di atas
+            if (imgFile) {
+                const img = new Image();
+                img.src = URL.createObjectURL(imgFile);
+                
+                // Menggunakan Promise agar canvas tidak dirender sebelum gambar selesai di-load
+                await new Promise(resolve => {
+                    img.onload = () => {
+                        const maxImgWidth = 720;
+                        const maxImgHeight = 500; // Batas tinggi gambar agar sisanya bisa untuk teks
+                        let w = img.width;
+                        let h = img.height;
+
+                        // Menyesuaikan rasio (Resize proportional)
+                        if (w > maxImgWidth) { h = h * (maxImgWidth / w); w = maxImgWidth; }
+                        if (h > maxImgHeight) { w = w * (maxImgHeight / h); h = maxImgHeight; }
+
+                        const x = (800 - w) / 2; // Center horizontal
+                        ctx.drawImage(img, x, currentY, w, h);
+                        currentY += h + 40; // Spasi bawah gambar
+                        resolve();
+                    };
+                });
+            }
+
+            // Setelah gambar (jika ada), gambar teks di bawahnya
+            if (textContent.trim() !== '') {
+                // Tulis teks yang dibungkus otomatis
+                wrapText(textContent, marginX, currentY + 30, 800 - (marginX*2), 50);
+            }
+
+            // Update preview di UI
+            document.getElementById('manual-preview-img').src = canvas.toDataURL('image/png');
+        }
+
+        // --- CONTROLLER UTAMA PENCETAKAN ---
+        async function startDirectPrint(mode) {
+            if (!btCharacteristic) {
+                alert("Sambungkan ke Printer Bluetooth terlebih dahulu!");
+                return;
+            }
+
+            let canvasesToPrint = [];
+
+            if (mode === 'pdf') {
+                canvasesToPrint = Array.from(document.getElementById('print-section').querySelectorAll('canvas'));
+                if (canvasesToPrint.length === 0) {
+                    alert("Pilih file PDF terlebih dahulu!");
+                    return;
+                }
+            } else if (mode === 'manual') {
+                // Render satu kali lagi untuk memastikan
+                await renderManualCanvas();
+                const manualCanvas = document.getElementById('manual-canvas');
+                canvasesToPrint = [manualCanvas];
+            }
+
+            document.getElementById('printing-overlay').classList.remove('hidden');
+            const progressBar = document.getElementById('print-progress-bar');
+            const progressText = document.getElementById('print-progress-text');
+
+            try {
+                for (let i = 0; i < canvasesToPrint.length; i++) {
+                    const tsplData = generateTSPLBitmap(canvasesToPrint[i]);
+                    await sendDataToPrinterInChunks(tsplData, (progress) => {
+                        const totalProgress = ((i + progress) / canvasesToPrint.length) * 100;
+                        progressBar.style.width = totalProgress + '%';
+                        progressText.innerText = `Mencetak Label ${i+1}/${canvasesToPrint.length} (${Math.round(totalProgress)}%)`;
+                    });
+                    
+                    // Jeda ekstra antar label
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Terjadi kesalahan saat mencetak: " + error.message);
+            } finally {
+                setTimeout(() => {
+                    document.getElementById('printing-overlay').classList.add('hidden');
+                    progressBar.style.width = '0%';
+                }, 1000);
+            }
+        }
+
+        // --- PEMBENTUKAN BITMAP TSPL (WARNA OTOMATIS) ---
+        function generateTSPLBitmap(canvas) {
+            const width = canvas.width;
+            const height = canvas.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const imgData = ctx.getImageData(0, 0, width, height).data;
+
+            const bytesWidth = Math.ceil(width / 8); 
+
+            let headerStr = `SIZE 100 mm,150 mm\r\nGAP 2 mm,0\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0,${bytesWidth},${height},0,`;
+            const encoder = new TextEncoder();
+            const headerBytes = encoder.encode(headerStr);
+
+            const bitmapData = new Uint8Array(bytesWidth * height);
+            const isReverseChecked = document.getElementById('fix-bg-checkbox').checked;
+            
+            bitmapData.fill(0x00); 
+            
+            let byteIndex = 0;
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < bytesWidth * 8; x++) {
+                    if (x < width) {
+                        const i = (y * width + x) * 4;
+                        const lum = (0.299 * imgData[i]) + (0.587 * imgData[i+1]) + (0.114 * imgData[i+2]);
+                        const isTransparent = imgData[i+3] < 128;
+                        
+                        if (isReverseChecked) {
+                            if (lum >= 128 || isTransparent) {
+                                bitmapData[byteIndex] |= (1 << (7 - (x % 8)));
+                            }
+                        } else {
+                            if (lum < 128 && !isTransparent) {
+                                bitmapData[byteIndex] |= (1 << (7 - (x % 8)));
+                            }
+                        }
+                    } else {
+                        // Tepi/Padding
+                        if (isReverseChecked) {
+                            bitmapData[byteIndex] |= (1 << (7 - (x % 8)));
+                        }
+                    }
+                    if (x % 8 === 7) byteIndex++;
+                }
+            }
+            
+            const footerBytes = encoder.encode("\r\nPRINT 1\r\n");
+
+            const finalBuffer = new Uint8Array(headerBytes.length + bitmapData.length + footerBytes.length);
+            finalBuffer.set(headerBytes, 0);
+            finalBuffer.set(bitmapData, headerBytes.length);
+            finalBuffer.set(footerBytes, headerBytes.length + bitmapData.length);
+
+            return finalBuffer;
+        }
+
+        // ==========================================
+        // LOGIKA BACA PDF & RENDER (PDF.js)
+        // ==========================================
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const fileInput = document.getElementById('pdf-upload');
+        let totalPagesRendered = 0;
+
+        fileInput.addEventListener('change', handleFiles);
+
+        async function handleFiles(event) {
+            const files = Array.from(event.target.files).filter(f => f.type === "application/pdf");
+            if(files.length === 0) return;
+
+            document.getElementById('drop-zone').classList.add('hidden');
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            
+            try {
+                for(let file of files) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
+                    
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        await renderPageForDirectPrint(pdf, i);
+                        totalPagesRendered++;
+                    }
+                }
+                
+                document.getElementById('total-pages-display').innerText = `${totalPagesRendered} Halaman`;
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('file-list-container').classList.remove('hidden');
+                document.getElementById('action-area').classList.remove('hidden');
+                
+            } catch(e) {
+                console.error(e);
+                alert("Gagal membaca PDF");
+                resetApp();
+            }
+        }
+
+        async function renderPageForDirectPrint(pdf, pageNumber) {
+            const page = await pdf.getPage(pageNumber);
+            
+            const viewportTemp = page.getViewport({ scale: 1 });
+            const requiredScale = 800 / viewportTemp.width; 
+            const viewport = page.getViewport({ scale: requiredScale });
+
+            const printCanvas = document.createElement('canvas');
+            const canvasId = `print-canvas-${totalPagesRendered}`;
+            printCanvas.id = canvasId;
+            printCanvas.width = viewport.width; 
+            printCanvas.height = viewport.height;
+            const printCtx = printCanvas.getContext('2d', { willReadFrequently: true });
+            
+            printCtx.fillStyle = "white";
+            printCtx.fillRect(0, 0, printCanvas.width, printCanvas.height);
+
+            await page.render({ canvasContext: printCtx, viewport: viewport }).promise;
+            document.getElementById('print-section').appendChild(printCanvas);
+
+            const previewWrapper = document.createElement('div');
+            previewWrapper.className = "relative shrink-0 preview-item group";
+            previewWrapper.onclick = () => openModal(canvasId);
+
+            const previewCanvas = document.createElement('canvas');
+            previewCanvas.width = viewport.width;
+            previewCanvas.height = viewport.height;
+            previewCanvas.className = "w-32 h-auto object-contain border border-slate-300 bg-white rounded";
+            previewCanvas.getContext('2d').drawImage(printCanvas, 0, 0);
+            
+            const zoomIcon = document.createElement('div');
+            zoomIcon.className = "absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center rounded transition-opacity";
+            zoomIcon.innerHTML = `<i data-lucide="zoom-in" class="text-white w-8 h-8"></i>`;
+
+            previewWrapper.appendChild(previewCanvas);
+            previewWrapper.appendChild(zoomIcon);
+            
+            document.getElementById('screen-preview').appendChild(previewWrapper);
+            lucide.createIcons({ root: previewWrapper });
+        }
+
+        function resetApp() {
+            fileInput.value = '';
+            document.getElementById('drop-zone').classList.remove('hidden');
+            document.getElementById('file-list-container').classList.add('hidden');
+            document.getElementById('action-area').classList.add('hidden');
+            document.getElementById('screen-preview').innerHTML = '';
+            document.getElementById('print-section').innerHTML = '';
+            totalPagesRendered = 0;
+        }
+    </script>
+</body>
+</html>
