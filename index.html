@@ -57,6 +57,25 @@
         <p id="print-progress-text" class="mt-2 text-sm text-blue-200">0%</p>
     </div>
 
+    <!-- Modal Panduan Bluetooth Modern (BARU) -->
+    <div id="bt-guide-modal" class="hidden fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center transform scale-95 transition-transform duration-300" id="bt-guide-content">
+            <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="scan-line" class="w-10 h-10 text-blue-600 animate-pulse"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800 mb-2">Pencarian Printer</h3>
+            <p class="text-slate-600 mb-6 text-sm leading-relaxed">
+                Browser akan membuka jendela penyandingan bawaan. Pastikan Bluetooth Anda aktif, lalu pilih printer thermal Anda.
+            </p>
+            <button onclick="executeBluetoothRequest()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition-all shadow-lg hover:shadow-blue-600/30 active:scale-95 flex justify-center items-center gap-2">
+                <i data-lucide="bluetooth-searching" class="w-5 h-5"></i> Buka Pemindai
+            </button>
+            <button onclick="closeBtGuide()" class="w-full mt-3 text-slate-500 hover:text-slate-700 py-2 font-medium text-sm transition-colors">
+                Batal
+            </button>
+        </div>
+    </div>
+
     <div id="app-ui" class="max-w-3xl mx-auto p-4 md:p-8">
         
         <header class="text-center mb-6">
@@ -201,6 +220,23 @@
     <script>
         lucide.createIcons();
 
+        // --- FITUR MODAL PANDUAN BLUETOOTH (BARU) ---
+        function connectBluetooth() {
+            const modal = document.getElementById('bt-guide-modal');
+            modal.classList.remove('hidden');
+            // Trigger reflow untuk animasi
+            void modal.offsetWidth;
+            modal.classList.remove('opacity-0');
+            document.getElementById('bt-guide-content').classList.remove('scale-95');
+        }
+
+        function closeBtGuide() {
+            const modal = document.getElementById('bt-guide-modal');
+            modal.classList.add('opacity-0');
+            document.getElementById('bt-guide-content').classList.add('scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
         // --- SISTEM TABS ---
         function switchTab(mode) {
             const tabPdf = document.getElementById('tab-btn-pdf');
@@ -249,7 +285,8 @@
         let btDevice = null;
         let btCharacteristic = null;
 
-        async function connectBluetooth() {
+        async function executeBluetoothRequest() {
+            closeBtGuide(); // Tutup modal panduan modern
             try {
                 updateBluetoothUI('connecting');
                 const device = await navigator.bluetooth.requestDevice({
